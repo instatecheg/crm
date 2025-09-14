@@ -164,6 +164,7 @@ import HelpIcon from '@/components/Icons/HelpIcon.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
 import Notifications from '@/components/Notifications.vue'
 import Settings from '@/components/Settings/Settings.vue'
+import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
 import { viewsStore } from '@/stores/views'
 import {
   unreadNotificationsCount,
@@ -224,6 +225,11 @@ const links = [
     to: 'Organizations',
   },
   {
+    label: 'Quotations',
+    icon: FileTextIcon,
+    to: 'Quotations',
+  },
+  {
     label: 'Notes',
     icon: NoteIcon,
     to: 'Notes',
@@ -241,6 +247,7 @@ const links = [
 ]
 
 const allViews = computed(() => {
+  console.log('Sidebar links:', links)
   let _views = [
     {
       name: 'All Views',

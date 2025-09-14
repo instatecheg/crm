@@ -102,6 +102,7 @@ import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import NotificationsIcon from '@/components/Icons/NotificationsIcon.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
+import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
 import { viewsStore } from '@/stores/views'
 import { unreadNotificationsCount } from '@/stores/notifications'
 import { createResource } from 'frappe-ui'
@@ -131,6 +132,11 @@ const links = [
     label: 'Organizations',
     icon: OrganizationsIcon,
     to: 'Organizations',
+  },
+  {
+    label: 'Quotations',
+    icon: FileTextIcon,
+    to: 'Quotations',
   },
   {
     label: 'Notes',

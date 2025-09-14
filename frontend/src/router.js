@@ -9,6 +9,19 @@ const routes = [
     name: 'Home',
   },
   {
+    path: '/quotations',
+    name: 'Quotations',
+    component: () => import('@/pages/quotation/QuotationList.vue'),
+    meta: { requiresAuth: true, title: 'Quotations' }
+  },
+  {
+    path: '/quotations/:name',
+    name: 'QuotationView',
+    component: () => import('@/pages/quotation/QuotationView.vue'),
+    props: true,
+    meta: { requiresAuth: true, title: 'Quotation' }
+  },
+  {
     path: '/notifications',
     name: 'Notifications',
     component: () => import('@/pages/MobileNotification.vue'),

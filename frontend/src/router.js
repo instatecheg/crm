@@ -15,8 +15,8 @@ const routes = [
     meta: { requiresAuth: true, title: 'Quotations' }
   },
   {
-    path: '/quotations/:name',
-    name: 'QuotationView',
+    path: '/quotations/:quotationId',
+    name: 'Quotation',
     component: () => import('@/pages/quotation/QuotationView.vue'),
     props: true,
     meta: { requiresAuth: true, title: 'Quotation' }

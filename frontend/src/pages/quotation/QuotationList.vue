@@ -1,167 +1,101 @@
 
-<script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { Button, ListView, ListHeader, ListHeaderItem, ListFooter, Dropdown, Tooltip } from 'frappe-ui'
-import MultipleAvatar from '@/components/MultipleAvatar.vue'
-import UserAvatar from '@/components/UserAvatar.vue'
-import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
-import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
-import ListBulkActions from '@/components/ListBulkActions.vue'
-import QuotationModal from '@/components/Modals/QuotationModal.vue'
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue';
+import LayoutHeader from '@/components/LayoutHeader.vue';
+import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue';
+import ViewControls from '@/components/ViewControls.vue';
+import QuotationModal from '@/components/Modals/QuotationModal.vue';
+import QuotationsListView from '@/components/ListViews/QuotationsListView.vue';
+import { Button } from 'frappe-ui';
+import { useRoute } from 'vue-router';
 
-const router = useRouter()
-const loading = ref(false)
-const rows = ref([])
-const q = ref('')
-const status = ref()
-const showQuotationModal = ref(false)
-const defaults = ref({})
+const quotations = ref({});
+const loadMore = ref(1);
+const triggerResize = ref(1);
+const updatedPageCount = ref(20);
+const showQuotationModal = ref(false);
+const viewControls = ref(null);
+const quotationsListView = ref(null);
+const route = useRoute();
 
-const columns = [
-  { key: 'name', label: 'Name', width: 180 },
-  { key: 'transaction_date', label: 'Date', width: 120 },
-  { key: 'customer', label: 'Customer', width: 200 },
-  { key: 'status', label: 'Status', width: 120 },
-  { key: 'grand_total', label: 'Total', width: 120, render: (row) => row.grand_total ? `${row.grand_total} ${row.currency}` : '—' },
-]
-
-
-// Fetch quotations from ERPNext using integration API/module
-async function fetchList() {
-  loading.value = true
-  try {
-    // Example endpoint: /api/method/crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.get_quotations
-    // You may need to adjust the endpoint to match your integration
-    const params = new URLSearchParams({
-      q: q.value,
-      status: status.value || '',
-    })
-    const res = await fetch(`/api/method/crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.get_quotations?${params.toString()}`, { credentials: 'include' })
-    const data = await res.json()
-    // Assume data.message is the list of quotations
-    rows.value = data?.message || []
-  } finally {
-    loading.value = false
+// Compute rows for the list view
+const rows = computed(() => {
+  console.log('[DEBUG] Computing rows, quotations.value:', quotations.value);
+  console.log('[DEBUG] quotations.value?.data:', quotations.value?.data);
+  
+  if (!quotations.value?.data?.data) {
+    console.log('[DEBUG] No data found, returning empty array');
+    return [];
   }
-}
+  
+  const dataArray = quotations.value.data.data;
+  console.log('[DEBUG] Data array:', dataArray, 'Type:', typeof dataArray, 'Is Array:', Array.isArray(dataArray));
+  
+  // Ensure we return an array
+  return Array.isArray(dataArray) ? dataArray : [];
+});
 
-function openCreateModal() {
-  defaults.value = {}
-  showQuotationModal.value = true
-}
-
-
-// Fetch deals for dropdown
-const deals = ref([])
-async function fetchDeals() {
-  loading.value = true
-  try {
-    const res = await fetch('/api/resource/CRM Deal?fields=["name","organization","customer","currency"]', { credentials: 'include' })
-    const data = await res.json()
-    deals.value = data?.data || []
-  } finally {
-    loading.value = false
-  }
-}
-
-// Open modal to create quotation from deal
-async function openCreateFromDeal(dealId) {
-  loading.value = true
-  try {
-    // Fetch deal details
-    const res = await fetch(`/api/resource/CRM Deal/${dealId}`, { credentials: 'include' })
-    const data = await res.json()
-    const deal = data.data || {}
-    // Prefill quotation modal with deal details
-    defaults.value = {
-      customer: deal.customer || deal.organization,
-      party_name: deal.organization,
-      currency: deal.currency || 'USD',
-      // Add more fields as needed (e.g., items)
-    }
-    showQuotationModal.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
+// Debug watcher for quotations data
+watch(quotations, (val) => {
+  // eslint-disable-next-line no-console
+  console.log('[DEBUG] Quotations list updated:', val);
+}, { deep: true });
 </script>
 
 <template>
-  <div class="p-0">
-    <div class="flex items-center justify-between border-b px-6 py-4">
-      <div class="flex items-center gap-2">
-        <span class="text-lg font-semibold">Quotations</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <Button variant="solid" iconLeft="plus" @click="openCreateModal">Create</Button>
-        <Dropdown :options="dealOptions" variant="ghost" @open="fetchDeals">
-          <Button iconLeft="plus" variant="ghost">Create from Deal</Button>
-        </Dropdown>
-      </div>
+  <LayoutHeader>
+    <template #left-header>
+      <ViewBreadcrumbs v-model="viewControls" routeName="Quotations" />
+    </template>
+    <template #right-header>
+      <Button
+        variant="solid"
+        :label="__('Create')"
+        iconLeft="plus"
+        @click="showQuotationModal = true"
+      />
+    </template>
+  </LayoutHeader>
 
+  <!-- List and filter controls -->
+  <ViewControls
+    ref="viewControls"
+    v-model="quotations"
+    v-model:loadMore="loadMore"
+    v-model:resizeColumn="triggerResize"
+    v-model:updatedPageCount="updatedPageCount"
+    doctype="Quotation"
+    :options="{ allowedViews: ['list', 'group_by', 'kanban'] }"
+  />
 
-// Dropdown options for deals
-const dealOptions = computed(() =>
-  deals.value.map(deal => ({
-    label: deal.name + (deal.organization ? ` (${deal.organization})` : ''),
-    onClick: () => openCreateFromDeal(deal.name)
-  }))
-)
+  <QuotationsListView
+    ref="quotationsListView"
+    v-if="quotations.data && rows.length"
+    v-model="quotations.data.page_length_count"
+    v-model:list="quotations"
+    :rows="rows"
+    :columns="quotations.data.columns"
+    :options="{
+      showTooltip: false,
+      resizeColumn: true,
+      rowCount: quotations.data.row_count,
+      totalCount: quotations.data.total_count,
+    }"
+    @loadMore="() => loadMore++"
+    @columnWidthUpdated="() => triggerResize++"
+    @updatePageCount="(count) => (updatedPageCount = count)"
+    @applyFilter="(data) => viewControls.applyFilter(data)"
+    @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
+    @likeDoc="(data) => viewControls.likeDoc(data)"
+    @selectionsChanged="(selections) => viewControls.updateSelections(selections)"
+  />
+  <div v-else-if="quotations.data" class="flex h-full items-center justify-center">
+    <div class="flex flex-col items-center gap-3 text-xl font-medium text-ink-gray-4">
+      <span>{{ __('No {0} Found', [__('Quotations')]) }}</span>
+      <Button :label="__('Create')" iconLeft="plus" @click="showQuotationModal = true" />
     </div>
-    <div class="flex items-center gap-3 px-6 py-2 border-b bg-surface-gray-1">
-      <input v-model="q" @keyup.enter="fetchList" class="w-64 border rounded p-2" placeholder="Search by Name or Party" />
-      <select v-model="status" @change="fetchList" class="border rounded p-2">
-        <option :value="undefined">All Statuses</option>
-        <option>Draft</option>
-        <option>Open</option>
-        <option>Lost</option>
-        <option>Ordered</option>
-        <option>Expired</option>
-        <option>Cancelled</option>
-      </select>
-      <Button @click="fetchList" iconLeft="refresh-cw" variant="ghost">Refresh</Button>
-    </div>
-    <ListView
-      :columns="columns"
-      :rows="rows"
-      :loading="loading"
-      row-key="name"
-      :options="{
-        getRowRoute: (row) => ({ name: 'QuotationView', params: { name: row.name } }),
-        selectable: true,
-        showTooltip: true,
-        resizeColumn: false,
-      }"
-      
-    >
-      <template #row="{ row }">
-        <tr>
-          <td>
-            <span class="font-medium">{{ row.name }}</span>
-          </td>
-          <td>
-            <span>{{ row.transaction_date }}</span>
-          </td>
-          <td>
-            <UserAvatar :name="row.customer" size="sm" class="inline-block mr-2" />
-            <span>{{ row.customer }}</span>
-          </td>
-          <td>
-            <span class="inline-flex items-center">
-              <IndicatorIcon :class="row.status === 'Draft' ? 'text-gray-400' : row.status === 'Open' ? 'text-blue-500' : row.status === 'Ordered' ? 'text-green-500' : row.status === 'Lost' ? 'text-red-500' : row.status === 'Expired' ? 'text-yellow-500' : 'text-gray-300'" />
-              <span class="ml-1">{{ row.status }}</span>
-            </span>
-          </td>
-          <td>
-            <span>{{ row.grand_total ? row.grand_total + ' ' + row.currency : '—' }}</span>
-          </td>
-        </tr>
-      </template>
-
-    </ListView>
-    <ListBulkActions v-model="rows" doctype="Quotation" />
-    <QuotationModal v-if="showQuotationModal" v-model="showQuotationModal" :defaults="defaults" @created="fetchList" />
   </div>
+
+  <!-- Create Quotation modal -->
+  <QuotationModal v-model="showQuotationModal" @created="viewControls?.refresh()" />
 </template>

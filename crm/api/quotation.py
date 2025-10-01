@@ -221,3 +221,26 @@ def get_quotation_filters():
 	except Exception as e:
 		frappe.log_error(f"Error fetching quotation filters: {str(e)}")
 		return {}
+
+
+@frappe.whitelist()
+def create_quotation(data):
+    """إنشاء Quotation جديد مع الحقول الأساسية والـ items"""
+    if not data.get("items"):
+        frappe.throw("Quotation must have at least one Item")
+
+    doc = frappe.get_doc({
+        "doctype": "Quotation",
+        "quotation_to": data.get("quotation_to"),
+        "transaction_date": data.get("transaction_date"),
+        "order_type": data.get("order_type"),
+        "company": data.get("company"),
+        "currency": data.get("currency"),
+        "selling_price_list": data.get("selling_price_list"),
+        "items": data.get("items"),
+        "party_name": data.get("party_name"),
+        "valid_till": data.get("valid_till"),
+    })
+    doc.insert()
+    frappe.db.commit()
+    return doc.name

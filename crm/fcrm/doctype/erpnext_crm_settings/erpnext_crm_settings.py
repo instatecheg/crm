@@ -221,56 +221,62 @@ def get_contacts(doc):
 	return contacts
 
 
-def get_organization_address(organization):
-	address = frappe.db.get_value("CRM Organization", organization, "address")
-	address = frappe.get_cached_doc("Address", address) if address else None
-	if not address:
-		return None
-	return {
-		"name": address.name,
-		"address_title": address.address_title,
-		"address_type": address.address_type,
-		"address_line1": address.address_line1,
-		"address_line2": address.address_line2,
-		"city": address.city,
-		"county": address.county,
-		"state": address.state,
-		"country": address.country,
-		"pincode": address.pincode,
-	}
-
-
 def create_customer_in_erpnext(doc, method):
-	erpnext_crm_settings = frappe.get_single("ERPNext CRM Settings")
-	if (
-		not erpnext_crm_settings.enabled
-		or not erpnext_crm_settings.create_customer_on_status_change
-		or doc.status != erpnext_crm_settings.deal_status
-	):
-		return
+    erpnext_crm_settings = frappe.get_single("ERPNext CRM Settings")
+    if (
+        not erpnext_crm_settings.enabled
+        or not erpnext_crm_settings.create_customer_on_status_change
+        or doc.status != erpnext_crm_settings.deal_status
+    ):
+        return
 
-	contacts = get_contacts(doc)
-	address = get_organization_address(doc.organization)
-	customer = {
-		"customer_name": doc.organization,
-		"customer_group": "All Customer Groups",
-		"customer_type": "Company",
-		"territory": doc.territory,
-		"default_currency": doc.currency,
-		"industry": doc.industry,
-		"website": doc.website,
-		"crm_deal": doc.name,
-		"contacts": json.dumps(contacts),
-		"address": json.dumps(address) if address else None,
-	}
-	if not erpnext_crm_settings.is_erpnext_in_different_site:
-		from erpnext.crm.frappe_crm_api import create_customer
+    # ✅ Address
+    address = None
+    try:
+        if doc.custom_address_line_1 and doc.custom_country:
+            address = frappe.get_doc({
+                "doctype": "Address",
+                "address_title": doc.organization,
+                "address_line1": doc.custom_address_line_1,
+                "address_line2": doc.custom_address_line_2,
+                "city": doc.custom_city,
+                "pincode": doc.custom_pincode,
+                "country": doc.custom_country,
+            })
+            address.insert(ignore_permissions=True)
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), "Error while creating Address from Deal")
 
-		create_customer(customer)
-	else:
-		create_customer_in_remote_site(customer, erpnext_crm_settings)
+    # ✅ Customer
+    customer = frappe.get_doc({
+        "doctype": "Customer",
+        "customer_name": doc.organization,
+        "customer_group": "All Customer Groups",
+        "customer_type": "Company",
+        "territory": doc.territory,
+        "default_currency": doc.currency,
+        "industry": doc.industry,
+        "website": doc.website,
+        "crm_deal": doc.name,
 
-	frappe.publish_realtime("crm_customer_created")
+        "zatca_customer_name_in_arabic": doc.custom_zatca_customer_name_in_arabic,
+        "custom_buyer_id_type": doc.custom_buyer_id_type,
+        "custom_buyer_id": doc.custom_buyer_id,
+        "tax_id": doc.custom_tax_id,
+
+        "customer_primary_address": address.name if address else None
+    })
+    customer.insert(ignore_permissions=True)
+
+    if address:
+        address.append("links", {
+            "link_doctype": "Customer",
+            "link_name": customer.name
+        })
+        address.save(ignore_permissions=True)
+
+    frappe.publish_realtime("crm_customer_created")
+
 
 
 def create_customer_in_remote_site(customer, erpnext_crm_settings):

@@ -94,6 +94,18 @@ const routes = [
     name: 'Invalid Page',
     component: () => import('@/pages/InvalidPage.vue'),
   },
+  {
+    alias: '/quotations',
+    path: '/quotations/view/:viewType?',
+    name: 'Quotations',
+    component: () => import('@/pages/Quotations.vue'),
+  },
+  {
+    path: '/quotations/:quotationId',
+    name: 'Quotation',
+    component: () => import(`@/pages/${handleMobileView('Quotation')}.vue`),
+    props: true,
+  },
 ]
 
 const handleMobileView = (componentName) => {

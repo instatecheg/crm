@@ -21,7 +21,9 @@ add_to_apps_screen = [
 		"has_permission": "crm.api.check_app_permission",
 	}
 ]
-
+override_doctype_class = {
+    "Quotation": "crm.overrides.quotation.CustomQuotation",
+}
 # Includes in <head>
 # ------------------
 

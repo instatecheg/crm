@@ -122,6 +122,11 @@ const links = [
     icon: DealsIcon,
     to: 'Deals',
   },
+    {
+    label: 'Quotations',
+    icon: FileTextIcon,
+    to: 'Quotations',
+  },
   {
     label: 'Contacts',
     icon: ContactsIcon,

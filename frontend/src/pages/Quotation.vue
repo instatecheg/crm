@@ -21,23 +21,28 @@
         doctype="Quotation"
         :docname="quotationId"
       />
-      <Dropdown
-        v-if="doc && statusOptionsList.length"
-        :options="statusOptionsList"
-        placement="right"
-      >
-        <template #default="{ open }">
-          <Button
-            v-if="doc.status"
-            :label="doc.status"
-            :iconRight="open ? 'chevron-up' : 'chevron-down'"
-          >
-            <template #prefix>
-              <IndicatorIcon :class="getQuotationStatusColor(doc.status)" />
-            </template>
-          </Button>
-        </template>
-      </Dropdown>
+      <div v-if="doc.name" class="flex items-center gap-2">
+        <Badge :label="doc.status" :theme="statusBadgeTheme" />
+        <Button
+          v-if="doc.docstatus === 0"
+          variant="solid"
+          :label="__('Submit')"
+          :loading="isSubmitting"
+          @click="submitQuotation"
+        />
+        <Dropdown
+          v-else-if="doc.docstatus === 1 && doc.status !== 'Lost'"
+          :options="statusActions"
+          placement="right"
+        >
+          <template #default="{ open }">
+            <Button
+              :label="__('Actions')"
+              :iconRight="open ? 'chevron-up' : 'chevron-down'"
+            />
+          </template>
+        </Dropdown>
+      </div>
     </template>
   </LayoutHeader>
   <div v-if="doc.name" class="flex h-full overflow-hidden">
@@ -176,6 +181,34 @@
     :docname="quotationId"
     name="Quotations"
   />
+  <Dialog
+    v-model="showLostReasonDialog"
+    :options="{ title: __('Mark Quotation as Lost') }"
+  >
+    <template #body-content>
+      <div class="flex flex-col gap-4">
+        <FormControl
+          type="autocomplete"
+          :label="__('Lost Reason')"
+          :options="lostReasonOptions"
+          v-model="lostReasonLink"
+        />
+        <FormControl
+          type="textarea"
+          :label="__('Detailed Reason (optional)')"
+          v-model="lostDetailedReason"
+        />
+      </div>
+    </template>
+    <template #actions>
+      <Button
+        variant="solid"
+        :label="__('Confirm')"
+        :loading="isMarkingLost"
+        @click="declareLost"
+      />
+    </template>
+  </Dialog>
 </template>
 
 <script setup>
@@ -191,7 +224,6 @@ import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
-import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import LinkIcon from '@/components/Icons/LinkIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
@@ -210,6 +242,9 @@ import { callEnabled } from '@/composables/settings'
 import {
   createResource,
   Dropdown,
+  Dialog,
+  FormControl,
+  Badge,
   Tooltip,
   Avatar,
   Tabs,
@@ -217,7 +252,7 @@ import {
   usePageMeta,
   toast,
 } from 'frappe-ui'
-import { ref, computed, h, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
 
@@ -259,40 +294,133 @@ watch(error, (err) => {
   }
 })
 
-// Quotation has a fixed ERPNext status list (no per-tenant "statuses"
-// doctype the way CRM Deal/Lead do), so this is defined locally rather
-// than pulled from a statusesStore.
-const QUOTATION_STATUSES = [
-  'Draft',
-  'Open',
-  'Replied',
-  'Partially Ordered',
-  'Ordered',
-  'Lost',
-  'Cancelled',
-  'Expired',
-]
+// Quotation's status is mostly computed server-side by ERPNext's own
+// Quotation.set_status() on every save (based on docstatus, valid_till,
+// and % ordered) — Open/Expired/Ordered/Partially Ordered/Cancelled are
+// NOT directly settable by writing the field. The only real actions
+// exposed to users are: submit the draft, cancel the submitted doc, or
+// declare it lost (which also requires a lost reason). Replied/Ordered/
+// Partially Ordered/Expired have no manual control here by design —
+// they're derived from emails, linked Sales Orders, and the valid_till
+// date respectively.
 const QUOTATION_STATUS_COLORS = {
-  Draft: 'text-ink-gray-4',
-  Open: 'text-blue-500',
-  Replied: 'text-yellow-500',
-  'Partially Ordered': 'text-orange-500',
-  Ordered: 'text-green-600',
-  Lost: 'text-red-500',
-  Cancelled: 'text-ink-gray-4',
-  Expired: 'text-ink-gray-4',
-}
-function getQuotationStatusColor(status) {
-  return QUOTATION_STATUS_COLORS[status] || 'text-ink-gray-4'
+  Draft: 'gray',
+  Open: 'blue',
+  Replied: 'yellow',
+  'Partially Ordered': 'orange',
+  Ordered: 'green',
+  Lost: 'red',
+  Cancelled: 'gray',
+  Expired: 'gray',
 }
 
-const statusOptionsList = computed(() =>
-  QUOTATION_STATUSES.map((status) => ({
-    label: status,
-    icon: () => h(IndicatorIcon, { class: getQuotationStatusColor(status) }),
-    onClick: () => updateField('status', status),
+const statusBadgeTheme = computed(
+  () => QUOTATION_STATUS_COLORS[doc.value.status] || 'gray',
+)
+
+const isSubmitting = ref(false)
+const isMarkingLost = ref(false)
+const showLostReasonDialog = ref(false)
+const lostReasonLink = ref('') // holds { label, value } from FormControl autocomplete, or a plain string
+const lostDetailedReason = ref('')
+
+const lostReasonsResource = createResource({
+  url: 'frappe.client.get_list',
+  params: {
+    doctype: 'Quotation Lost Reason',
+    fields: ['name'],
+    limit_page_length: 0,
+  },
+  auto: true,
+})
+
+const lostReasonOptions = computed(() =>
+  (lostReasonsResource.data || []).map((d) => ({
+    label: d.name,
+    value: d.name,
   })),
 )
+
+// Must come after showLostReasonDialog/lostReasonsResource are declared —
+// watch()'s source is read immediately when this line runs, so referencing
+// either of them before their `const` declaration executes throws a
+// "Cannot access before initialization" (TDZ) error and crashes the whole
+// component on load.
+watch(showLostReasonDialog, (isOpen) => {
+  if (isOpen) {
+    lostReasonsResource.reload()
+  }
+})
+
+const statusActions = computed(() => [
+  {
+    label: __('Mark as Lost'),
+    onClick: () => (showLostReasonDialog.value = true),
+  },
+  {
+    label: __('Cancel Quotation'),
+    onClick: cancelQuotation,
+  },
+])
+
+function submitQuotation() {
+  isSubmitting.value = true
+  createResource({
+    url: 'frappe.client.submit',
+    params: { doc: JSON.stringify({ ...doc.value, docstatus: 1 }) },
+    auto: true,
+    onSuccess: () => {
+      isSubmitting.value = false
+      document.reload()
+    },
+    onError: (err) => {
+      isSubmitting.value = false
+      toast.error(err.messages?.[0] || __('Could not submit'))
+    },
+  })
+}
+
+function cancelQuotation() {
+  createResource({
+    url: 'frappe.client.cancel',
+    params: { doctype: 'Quotation', name: props.quotationId },
+    auto: true,
+    onSuccess: () => document.reload(),
+    onError: (err) => toast.error(err.messages?.[0] || __('Could not cancel')),
+  })
+}
+
+function declareLost() {
+  // FormControl's autocomplete binds the whole { label, value } option to
+  // v-model, not just the raw string — send only the value to the backend.
+  const reasonValue = lostReasonLink.value?.value ?? lostReasonLink.value
+  if (!reasonValue) {
+    toast.error(__('Please select a lost reason'))
+    return
+  }
+  isMarkingLost.value = true
+  createResource({
+    url: 'crm.overrides.quotation.declare_quotation_lost',
+    params: {
+      quotation: props.quotationId,
+      lost_reasons_list: JSON.stringify([{ lost_reason: reasonValue }]),
+      competitors: JSON.stringify([]),
+      detailed_reason: lostDetailedReason.value || null,
+    },
+    auto: true,
+    onSuccess: () => {
+      isMarkingLost.value = false
+      showLostReasonDialog.value = false
+      lostReasonLink.value = ''
+      lostDetailedReason.value = ''
+      document.reload()
+    },
+    onError: (err) => {
+      isMarkingLost.value = false
+      toast.error(err.messages?.[0] || __('Could not update'))
+    },
+  })
+}
 
 function formatCurrency(value, currency) {
   if (value == null) return ''
@@ -375,19 +503,6 @@ function triggerCall() {
     return
   }
   makeCall(mobile_no)
-}
-
-function updateField(name, value) {
-  let oldValue = doc.value[name]
-  doc.value[name] = value
-
-  document.save.submit(null, {
-    onSuccess: () => (reload.value = true),
-    onError: (err) => {
-      doc.value[name] = oldValue
-      toast.error(err.messages?.[0] || __('Error updating field'))
-    },
-  })
 }
 
 function reloadAssignees(data) {

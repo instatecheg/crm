@@ -81,3 +81,23 @@ class CustomQuotation(Quotation):
 			"title_field": "party_name",
 			"kanban_fields": '["grand_total", "valid_till", "_assign", "modified"]',
 		}
+
+
+@frappe.whitelist()
+def declare_quotation_lost(quotation, lost_reasons_list, competitors=None, detailed_reason=None):
+
+	if isinstance(lost_reasons_list, str):
+		lost_reasons_list = frappe.parse_json(lost_reasons_list)
+	if isinstance(competitors, str):
+		competitors = frappe.parse_json(competitors)
+ 
+	if not frappe.has_permission("Quotation", "write", quotation):
+		frappe.throw(
+			frappe._("Not permitted to update this Quotation"), frappe.PermissionError
+		)
+ 
+	doc = frappe.get_doc("Quotation", quotation)
+	doc.declare_enquiry_lost(lost_reasons_list, competitors or [], detailed_reason)
+	return doc.name
+ 
+ 

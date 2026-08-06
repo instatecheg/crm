@@ -27,6 +27,12 @@ get_site_info = "crm.activation.get_site_info"
 export_python_type_annotations = True
 require_type_annotated_api_methods = True
 
+
+
+override_doctype_class = {
+    "Quotation": "crm.overrides.quotation.CustomQuotation",
+}
+
 # Includes in <head>
 # ------------------
 

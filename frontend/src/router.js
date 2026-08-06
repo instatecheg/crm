@@ -144,6 +144,18 @@ const routes = [
     name: 'Not Permitted',
     component: () => import('@/pages/NotPermitted.vue'),
   },
+   {
+    alias: '/quotations',
+    path: '/quotations/view/:viewType?',
+    name: 'Quotations',
+    component: () => import('@/pages/Quotations.vue'),
+  },
+  {
+    path: '/quotations/:quotationId',
+    name: 'Quotation',
+    component: () => import(`@/pages/${handleMobileView('Quotation')}.vue`),
+    props: true,
+  },
 ]
 
 const handleMobileView = (componentName) => {
